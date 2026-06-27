@@ -3,7 +3,11 @@ live_shadow_memories*.json
 shadow_panda_memories*.json
 sample_memories.json
 *.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
 *.db
+*.db-*
 
 # Local model/runtime artifacts
 .models/

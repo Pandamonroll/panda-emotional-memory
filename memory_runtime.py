@@ -7,12 +7,14 @@ import json
 import os
 
 from memory_system import EmbeddingConfig, ExchangeObservation, MemoryStore, SearchResult
+from memory_sqlite import load_memory_store_sqlite, save_memory_store_sqlite, sqlite_store_status
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 DEFAULT_MODEL_PATH = PROJECT_ROOT / ".models" / "sentence-transformers--paraphrase-multilingual-MiniLM-L12-v2"
 DEFAULT_SHADOW_STORE_PATH = PROJECT_ROOT / "shadow_panda_memories.json"
-DEFAULT_LIVE_STORE_PATH = PROJECT_ROOT / "live_shadow_memories.json"
+DEFAULT_LEGACY_LIVE_STORE_PATH = PROJECT_ROOT / "live_shadow_memories.json"
+DEFAULT_LIVE_STORE_PATH = PROJECT_ROOT / "live_memory.sqlite"
 
 
 @dataclass
@@ -61,6 +63,25 @@ class MemoryRuntime:
             return MemoryStore.load(self.shadow_store_path)
         return MemoryStore(self.embedding_config)
 
+    def _load_store_path(self, path: Path) -> MemoryStore:
+        if path.suffix.lower() in {".sqlite", ".sqlite3", ".db"}:
+            return load_memory_store_sqlite(path)
+        return MemoryStore.load(path)
+
+    def _save_store_path(self, path: Path, store: MemoryStore) -> None:
+        if path.suffix.lower() in {".sqlite", ".sqlite3", ".db"}:
+            save_memory_store_sqlite(path, store)
+            return
+
+        temp_path = path.with_name(f".{path.name}.tmp")
+        store.save(temp_path)
+        os.replace(temp_path, path)
+
+    def _load_initial_store(self) -> MemoryStore:
+        if self.live_store_path == DEFAULT_LIVE_STORE_PATH and DEFAULT_LEGACY_LIVE_STORE_PATH.exists():
+            return MemoryStore.load(DEFAULT_LEGACY_LIVE_STORE_PATH)
+        return self._load_shadow_base()
+
     def _retarget_store(self, store: MemoryStore) -> MemoryStore:
         current_model = store.embedding_config.model_name or ""
         desired_model = self.embedding_config.model_name or ""
@@ -84,19 +105,16 @@ class MemoryRuntime:
             return self._store
 
         if self.live_store_path.exists():
-            self._store = self._retarget_store(MemoryStore.load(self.live_store_path))
+            self._store = self._retarget_store(self._load_store_path(self.live_store_path))
             return self._store
 
-        store = self._retarget_store(self._load_shadow_base())
-        store.save(self.live_store_path)
+        store = self._retarget_store(self._load_initial_store())
+        self._save_store_path(self.live_store_path, store)
         self._store = store
         return store
 
     def save_store(self, store: MemoryStore) -> None:
-        target = self.live_store_path
-        temp_path = target.with_name(f".{target.name}.tmp")
-        store.save(temp_path)
-        os.replace(temp_path, target)
+        self._save_store_path(self.live_store_path, store)
         self._store = store
 
     def observe_exchange(
@@ -136,23 +154,42 @@ class MemoryRuntime:
         memory_count: int | None = None
         backend_name = self.embedding_config.backend
         model_name = self.embedding_config.model_name
+        schema_version: object = None
 
-        status_path = self.live_store_path if live_exists else self.shadow_store_path
-        if status_path.exists():
-            data = json.loads(status_path.read_text(encoding="utf-8"))
+        legacy_json_exists = DEFAULT_LEGACY_LIVE_STORE_PATH.exists()
+        if live_exists and self.live_store_path.suffix.lower() in {".sqlite", ".sqlite3", ".db"}:
+            status = sqlite_store_status(self.live_store_path)
+            memory_count = status["memory_count"] if isinstance(status["memory_count"], int) else None
+            backend_name = status["backend"] or backend_name
+            model_name = status["model_name"] or model_name
+            schema_version = status["schema_version"]
+        elif self.live_store_path == DEFAULT_LIVE_STORE_PATH and legacy_json_exists:
+            data = json.loads(DEFAULT_LEGACY_LIVE_STORE_PATH.read_text(encoding="utf-8"))
             memory_count = len(data.get("memories", [])) + len(data.get("notes", []))
             raw_config = data.get("embedding_config", {})
             backend_name = raw_config.get("backend", backend_name)
             model_name = raw_config.get("model_name", model_name)
+        else:
+            status_path = self.live_store_path if live_exists else self.shadow_store_path
+            if status_path.exists():
+                data = json.loads(status_path.read_text(encoding="utf-8"))
+                memory_count = len(data.get("memories", [])) + len(data.get("notes", []))
+                raw_config = data.get("embedding_config", {})
+                backend_name = raw_config.get("backend", backend_name)
+                model_name = raw_config.get("model_name", model_name)
 
         return {
             "live_store_path": str(self.live_store_path),
+            "store_format": "sqlite" if self.live_store_path.suffix.lower() in {".sqlite", ".sqlite3", ".db"} else "json",
             "shadow_store_path": str(self.shadow_store_path),
             "live_store_exists": live_exists,
+            "legacy_json_store_path": str(DEFAULT_LEGACY_LIVE_STORE_PATH),
+            "legacy_json_store_exists": legacy_json_exists,
             "shadow_store_exists": shadow_exists,
             "memory_count": memory_count,
             "backend": backend_name,
             "model_name": model_name,
+            "schema_version": schema_version,
         }
 
 
@@ -192,6 +229,9 @@ def main() -> None:
 
     subparsers.add_parser("status", help="Show live runtime status.")
 
+    export_parser = subparsers.add_parser("export-json", help="Export the live store to JSON.")
+    export_parser.add_argument("--output", required=True, help="Output JSON path")
+
     args = parser.parse_args()
     runtime = MemoryRuntime()
 
@@ -220,6 +260,12 @@ def main() -> None:
 
     if args.command == "status":
         print(json.dumps(runtime.status(), ensure_ascii=False, indent=2))
+        return
+
+    if args.command == "export-json":
+        store = runtime.load_store()
+        store.save(args.output)
+        print(json.dumps({"output": args.output, "memory_count": len(store.memories)}, ensure_ascii=False, indent=2))
         return
 
     raise RuntimeError(f"Unhandled command: {args.command}")

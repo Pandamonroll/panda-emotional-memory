@@ -278,13 +278,14 @@ The current prototype keeps the default path dependency-light so the design stay
 
 - `memory_system.py`: memory storage, reflection flow, settling, and retrieval
 - `memory_inference.py`: model-backed affect and reflection inferrers
-- `memory_runtime.py`: live observation runtime that grows a separate store while leaving the imported shadow snapshot untouched
+- `memory_runtime.py`: live observation runtime that grows a separate SQLite store while leaving the imported shadow snapshot untouched
+- `memory_sqlite.py`: SQLite persistence adapter for local durable memory storage
 - `memory_mcp_server.py`: tiny MCP wrapper so a client can automatically observe exchanges into the live store
 - `memory_mcp_server.sample.json`: sample MCP server config pointing at the local runtime
 - `migrate_pandamemory.py`: imports the current PandaMemory database into a separate shadow store for testing
 - `install_runtime.py`: local runtime installer that downloads wheels into the project venv and fetches the initial Hugging Face model into a normal local folder
 
-Generated memory stores such as `sample_memories.json`, `shadow_panda_memories.json`, and `live_shadow_memories.json` are intentionally ignored because they may contain private memory data.
+Generated memory stores such as `sample_memories.json`, `shadow_panda_memories.json`, `live_shadow_memories.json`, and `live_memory.sqlite` are intentionally ignored because they may contain private memory data.
 
 ## Shadow Testing
 
@@ -296,11 +297,13 @@ The safest current testing path is:
 
 ## Live Observation
 
-The next stage keeps three layers separate:
+The live runtime keeps three layers separate:
 
 - `panda_memory.sqlite`: the original PandaMemory source, untouched
 - `shadow_panda_memories.json`: the imported snapshot, also kept untouched
-- `live_shadow_memories.json`: the living store that now observes real exchanges
+- `live_memory.sqlite`: the living store that now observes real exchanges
+
+On first run, `memory_runtime.py` creates `live_memory.sqlite`. If a legacy `live_shadow_memories.json` exists beside it, that file is imported first so existing live memories are preserved. JSON remains useful as a private backup/export format, but SQLite is the default live store.
 
 That means we can let the new system actually grow without risking the old continuity sources.
 

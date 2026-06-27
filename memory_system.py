@@ -1131,13 +1131,11 @@ class MemoryStore:
         target.write_text(json.dumps(self.to_dict(), indent=2), encoding="utf-8")
 
     @classmethod
-    def load(cls, path: str | Path) -> "MemoryStore":
-        target = Path(path)
-        data = json.loads(target.read_text(encoding="utf-8"))
-
+    def from_dict(cls, data: dict[str, Any]) -> "MemoryStore":
         embedding_config = EmbeddingConfig(**data.get("embedding_config", {}))
         store = cls(embedding_config=embedding_config)
         for raw_memory in data.get("memories", []):
+            raw_memory = dict(raw_memory)
             affect_shadow = AffectShadow(**raw_memory.pop("affect_shadow", {}))
             raw_event_affect = raw_memory.pop("event_affect", None)
             raw_response_affect = raw_memory.pop("response_affect", None)
@@ -1187,6 +1185,12 @@ class MemoryStore:
             store.memories.append(imported_memory)
 
         return store
+
+    @classmethod
+    def load(cls, path: str | Path) -> "MemoryStore":
+        target = Path(path)
+        data = json.loads(target.read_text(encoding="utf-8"))
+        return cls.from_dict(data)
 
 
 def recommended_model_stack() -> dict[str, dict[str, str]]:

@@ -231,7 +231,7 @@ Why:
 
 Tradeoff:
 
-- the XLM-R / SentencePiece tokenizer path is fussier in this local Windows sandbox
+- the XLM-R / SentencePiece tokenizer path can be fussier in some local Windows setups
 - this is exactly the kind of infrastructure complexity that is acceptable to compromise on if it starts to distract from the real memory design
 
 Why not start with the `sentence-transformers` package itself:
@@ -283,7 +283,8 @@ The current prototype keeps the default path dependency-light so the design stay
 - `memory_mcp_server.sample.json`: sample MCP server config pointing at the local runtime
 - `migrate_pandamemory.py`: imports the current PandaMemory database into a separate shadow store for testing
 - `install_runtime.py`: local runtime installer that downloads wheels into the project venv and fetches the initial Hugging Face model into a normal local folder
-- `sample_memories.json`: example memory traces
+
+Generated memory stores such as `sample_memories.json`, `shadow_panda_memories.json`, and `live_shadow_memories.json` are intentionally ignored because they may contain private memory data.
 
 ## Shadow Testing
 

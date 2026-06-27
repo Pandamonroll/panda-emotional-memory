@@ -1,0 +1,27 @@
+# Private memory stores and imported data
+live_shadow_memories*.json
+shadow_panda_memories*.json
+sample_memories.json
+*.sqlite
+*.db
+
+# Local model/runtime artifacts
+.models/
+.model-cache/
+.venv*/
+.wheelhouse/
+.fixedtmp/
+.tmp*/
+__pycache__/
+*.py[cod]
+
+# Logs and transient files
+*.log
+*.tmp
+
+# Local editor and OS metadata
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/

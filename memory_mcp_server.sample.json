@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "panda-emotional-memory": {
+      "command": "C:\\path\\to\\panda-emotional-memory\\.venv-real\\Scripts\\python.exe",
+      "args": [
+        "C:\\path\\to\\panda-emotional-memory\\memory_mcp_server.py"
+      ]
+    }
+  }
+}
